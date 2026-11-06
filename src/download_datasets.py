@@ -193,6 +193,41 @@ def download_from_kaggle(
     return True
 
 
+def prepare_sample_dataset(sample_dir: str = "datasets/sample_data", output_dir: str = "datasets/raw") -> bool:
+    """
+    Sử dụng bộ dữ liệu mẫu (Sample Dataset) được cung cấp sẵn trong kho GitHub
+    để nạp vào pipeline kiểm thử ngay mà không cần kết nối internet.
+    """
+    if not os.path.exists(sample_dir):
+        print(f"[LỖI] Thư mục dữ liệu mẫu không tồn tại: {sample_dir}")
+        return False
+
+    os.makedirs(output_dir, exist_ok=True)
+    img_src = os.path.join(sample_dir, "images")
+    lbl_src = os.path.join(sample_dir, "labels")
+
+    count = 0
+    if os.path.exists(img_src) and os.path.exists(lbl_src):
+        for fname in os.listdir(img_src):
+            shutil.copy2(os.path.join(img_src, fname), os.path.join(output_dir, fname))
+            lbl_name = os.path.splitext(fname)[0] + ".txt"
+            lbl_file = os.path.join(lbl_src, lbl_name)
+            if os.path.exists(lbl_file):
+                shutil.copy2(lbl_file, os.path.join(output_dir, lbl_name))
+            count += 1
+    else:
+        # Nếu để chung trong 1 thư mục
+        for fname in os.listdir(sample_dir):
+            src_f = os.path.join(sample_dir, fname)
+            if os.path.isfile(src_f):
+                shutil.copy2(src_f, os.path.join(output_dir, fname))
+                count += 1
+
+    print(f"[THÀNH CÔNG] Đã sao chép {count} mẫu dữ liệu có sẵn từ '{sample_dir}' vào '{output_dir}'.")
+    print("Bây giờ bạn có thể chạy: python src/data_preprocessing.py --input-dir datasets/raw --output-dir datasets")
+    return True
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Dataset Downloader & Catalog Assistant cho đề tài Phát hiện Hút thuốc lá"
@@ -201,6 +236,11 @@ def parse_arguments():
         "--list",
         action="store_true",
         help="In danh mục các bộ dữ liệu công khai chất lượng cao kèm đường dẫn."
+    )
+    parser.add_argument(
+        "--prepare-sample",
+        action="store_true",
+        help="Sử dụng bộ dữ liệu mẫu (Sample Dataset) có sẵn trên repo để chạy thử nghiệm pipeline ngay."
     )
     parser.add_argument(
         "--source",
@@ -232,13 +272,19 @@ def parse_arguments():
 def main():
     args = parse_arguments()
 
+    if args.prepare_sample:
+        prepare_sample_dataset("datasets/sample_data", args.output_dir)
+        return
+
     if args.list or len(sys.argv) == 1:
         print_dataset_catalog()
         print("\nHƯỚNG DẪN SỬ DỤNG NHANH:")
-        print("1. Xem danh mục: python src/download_datasets.py --list")
-        print("2. Tải qua Roboflow:")
+        print("1. Chạy thử nghiệm ngay với dữ liệu mẫu có sẵn trên GitHub:")
+        print("   python src/download_datasets.py --prepare-sample")
+        print("\n2. Xem danh mục các bộ dữ liệu đầy đủ: python src/download_datasets.py --list")
+        print("\n3. Tải qua Roboflow:")
         print("   python src/download_datasets.py --source roboflow --dataset-id roboflow_smoking_behavior --api-key <YOUR_KEY>")
-        print("3. Tải qua Kaggle:")
+        print("\n4. Tải qua Kaggle:")
         print("   python src/download_datasets.py --source kaggle --dataset-id kaggle_smoking_detection\n")
         return
 

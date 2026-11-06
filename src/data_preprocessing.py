@@ -337,7 +337,8 @@ def split_and_organize_dataset(
     vào đúng cây thư mục chuẩn YOLO và thực hiện Data Augmentation nếu có yêu cầu.
     """
     random.seed(seed)
-    np.random.seed(seed)
+    if np is not None:
+        np.random.seed(seed)
 
     # Xáo trộn danh sách
     indices = list(range(len(samples)))

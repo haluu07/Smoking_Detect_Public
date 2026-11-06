@@ -63,8 +63,26 @@ pip install -r requirements.txt
 
 ---
 
-## 3. THU THẬP & TẢI DỮ LIỆU CÔNG KHAI (DATASET ACQUISITION)
+## 3. DỮ LIỆU HUẤN LUYỆN (DATASETS) & CƠ CHẾ QUẢN LÝ DỮ LIỆU
 
+> [!NOTE]
+> **Quy chuẩn lưu trữ trong Computer Vision:** Các bộ dữ liệu hình ảnh hoàn chỉnh thường có quy mô lớn (hàng nghìn ảnh, hàng GB) nên theo chuẩn kỹ thuật quốc tế không lưu trực tiếp toàn bộ ảnh raw trong cây mã nguồn Git (để tránh làm phình to dung lượng repository và gây lỗi timeout khi clone).
+> Thay vào đó, dự án đã cung cấp sẵn:
+> 1. **Bộ dữ liệu mẫu (Sample Dataset)** nằm ngay trong thư mục `datasets/sample_data/` trên GitHub để bạn có thể chạy thử nghiệm pipeline ngay lập tức sau khi clone!
+> 2. **Công cụ tải tự động** hoặc **Link tải trực tiếp** các bộ dữ liệu đầy đủ từ Roboflow Universe / Kaggle.
+
+### 3.1. Chạy thử nghiệm ngay với Dữ liệu mẫu (Sample Dataset có sẵn trên GitHub)
+Sau khi `git clone` repository về máy, bạn đã có sẵn tập ảnh và nhãn mẫu trong `datasets/sample_data/`. Chỉ cần chạy:
+
+```bash
+# Nạp dữ liệu mẫu vào pipeline:
+python src/download_datasets.py --prepare-sample
+
+# Chạy tiền xử lý và chia train/val:
+python src/data_preprocessing.py --input-dir datasets/raw --output-dir datasets
+```
+
+### 3.2. Danh mục & Tải các Bộ dữ liệu đầy đủ (Full Open-source Datasets)
 Module `src/download_datasets.py` tích hợp sẵn danh mục các bộ dữ liệu mã nguồn mở chất lượng cao nhất hiện nay, gán nhãn chuẩn YOLO:
 
 | ID Bộ dữ liệu | Nguồn | Các nhãn chính | Quy mô | Đặc điểm |
@@ -74,20 +92,18 @@ Module `src/download_datasets.py` tích hợp sẵn danh mục các bộ dữ li
 | `roboflow_smoking_calling` | Roboflow | `smoking`, `calling`, `normal` | ~4,200 ảnh | Phân biệt hút thuốc vs. nghe điện thoại |
 | `kaggle_smoking_detection` | Kaggle | `smoking`, `cigarette` | ~5,000 ảnh | Thu thập từ CCTV công cộng thực tế |
 
-### Câu lệnh sử dụng:
-
 ```bash
-# 1. Xem danh mục chi tiết các bộ dữ liệu
+# 1. Xem danh mục chi tiết các bộ dữ liệu:
 python src/download_datasets.py --list
 
-# 2. Tải trực tiếp từ Roboflow Universe (cung cấp API Key miễn phí từ roboflow.com)
+# 2. Tải trực tiếp từ Roboflow Universe (cung cấp API Key miễn phí từ roboflow.com):
 python src/download_datasets.py \
     --source roboflow \
     --dataset-id roboflow_smoking_behavior \
     --api-key YOUR_ROBOFLOW_API_KEY \
     --output-dir datasets/raw
 
-# 3. Tải từ Kaggle (yêu cầu file ~/.kaggle/kaggle.json)
+# 3. Tải từ Kaggle (yêu cầu file ~/.kaggle/kaggle.json):
 python src/download_datasets.py \
     --source kaggle \
     --dataset-id kaggle_smoking_detection \
