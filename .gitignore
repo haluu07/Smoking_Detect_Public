@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+smoking_env/
+env/
+venv/
+.venv/
+
+# Datasets and training artifacts
+datasets/raw/*
+datasets/train/images/*
+datasets/train/labels/*
+datasets/val/images/*
+datasets/val/labels/*
+!datasets/**/.gitkeep
+
+# Weights & Run logs
+runs/
+*.pt
+*.onnx
+*.engine
+
+# Violations logs & snapshots
+violations/snapshots/*
+violations/*.csv
+
+# System files
+.DS_Store
+*.swp
+*.bak

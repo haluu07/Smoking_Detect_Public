@@ -1,0 +1,34 @@
+# ==============================================================================
+# BỘ SIÊU THAM SỐ TỐI ƯU HUẤN LUYỆN (HYPERPARAMETERS)
+# Tối ưu hóa đặc thù cho bài toán phát hiện vật thể nhỏ (Cigarette) 
+# và hành vi phức tạp trong môi trường camera giám sát (CCTV)
+# ==============================================================================
+
+# Learning Rate Schedule (Cosine Annealing)
+lr0: 0.01             # Tốc độ học khởi tạo (SGD=1E-2, AdamW=1E-3)
+lrf: 0.01             # Tỷ lệ lr cuối cùng (lr0 * lrf)
+momentum: 0.937       # Hệ số momentum cho SGD / beta1 cho Adam
+weight_decay: 0.0005  # L2 regularization chống overfitting
+warmup_epochs: 3.0    # Khởi động chậm giúp gradient ổn định ở epoch đầu
+warmup_momentum: 0.8  # Warmup momentum
+warmup_bias_lr: 0.1   # Warmup bias learning rate
+
+# Loss Function Gains (Tối ưu cho vật thể nhỏ)
+box: 7.5              # Trọng số box loss (tăng độ chính xác vị trí điếu thuốc nhỏ)
+cls: 0.5              # Trọng số classification loss
+dfl: 1.5              # Distribution Focal Loss weight
+
+# Data Augmentation (Chống overfitting trong điều kiện ánh sáng thay đổi, camera CCTV)
+hsv_h: 0.015          # Biến thiên sắc thái màu (Hue)
+hsv_s: 0.7            # Biến thiên độ bão hòa màu (Saturation - thích nghi ánh sáng đèn/ngoài trời)
+hsv_v: 0.4            # Biến thiên độ sáng (Value - mô phỏng ngày/đêm/ngược sáng)
+degrees: 10.0         # Xoay ngẫu nhiên +/- 10 độ
+translate: 0.1        # Dịch chuyển ảnh +/- 10%
+scale: 0.5            # Co giãn ảnh +/- 50% (giúp mô hình học vật thể ở các cự ly xa gần)
+shear: 2.0            # Biến dạng cắt góc (Shear)
+perspective: 0.0001   # Phối cảnh góc nhìn nghiêng của camera gắn trên trần
+flipud: 0.0           # Không lật dọc vì người không đứng ngược đầu
+fliplr: 0.5           # Lật ngang 50% (người thuận tay trái / tay phải hút thuốc)
+mosaic: 1.0           # Ghép 4 ảnh (Mosaic) cực kỳ hữu ích nhận diện vật thể nhỏ
+mixup: 0.15           # Trộn 2 ảnh (Mixup) giúp mô hình không bị quá tự tin (overconfident)
+copy_paste: 0.1       # Copy-paste augmentation giúp đa dạng hóa bối cảnh điếu thuốc

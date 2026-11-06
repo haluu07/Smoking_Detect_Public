@@ -1,0 +1,22 @@
+# ==============================================================================
+# CẤU HÌNH BỘ DỮ LIỆU PHÁT HIỆN HÀNH VI HÚT THUỐC LÁ (SMOKING DETECTION)
+# Định dạng chuẩn tương thích hoàn toàn với Ultralytics YOLOv8 / YOLOv11
+# ==============================================================================
+
+# Đường dẫn gốc tới thư mục chứa dữ liệu (có thể dùng đường dẫn tuyệt đối hoặc tương đối)
+path: ../datasets
+
+# Thư mục ảnh huấn luyện và kiểm định (tính từ 'path' ở trên)
+train: train/images
+val: val/images
+test: val/images  # Tùy chọn, dùng val làm test nếu không có tập test riêng
+
+# Định nghĩa các lớp đối tượng (Classes)
+# Lưu ý: Các bộ dữ liệu phổ biến trên Roboflow/Kaggle thường gán nhãn:
+# - Option A (Phát hiện trực tiếp hành vi): ['smoking', 'not_smoking']
+# - Option B (Phát hiện chi tiết thực thể): ['smoking', 'cigarette', 'smoke']
+# Mặc định cấu hình chuẩn 3 lớp giúp mô hình học cả đối tượng nhỏ và hành động:
+names:
+  0: smoking        # Người đang có hành vi đưa thuốc lên hút / ngậm thuốc
+  1: cigarette      # Điếu thuốc lá, tàn thuốc, vape/pod
+  2: smoke          # Luồng khói tỏa ra quanh mặt/miệng
