@@ -85,12 +85,44 @@ def check_hardware_environment() -> Dict[str, Any]:
     }
 
 
-def verify_dataset_yaml(yaml_path: str) -> bool:
-    """Kiểm tra sự tồn tại và tính hợp lệ của file cấu hình dataset YAML."""
-    if not os.path.exists(yaml_path):
-        logger.error(f"Không tìm thấy file cấu hình dataset: {yaml_path}")
-        return False
-    return True
+def verify_dataset_yaml(yaml_path: str) -> str:
+    """
+    Kiểm tra sự tồn tại của file YAML và tính sẵn sàng của thư mục dữ liệu train/val.
+    Trả về đường dẫn tuyệt đối của file cấu hình YAML.
+    """
+    abs_yaml = os.path.abspath(yaml_path)
+    if not os.path.exists(abs_yaml):
+        logger.error(f"Không tìm thấy file cấu hình dataset: {abs_yaml}")
+        return ""
+
+    import yaml
+    try:
+        with open(abs_yaml, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+
+        base_path = cfg.get("path", "")
+        # Nếu path là tương đối, tính từ thư mục chứa file yaml hoặc project root
+        if not os.path.isabs(base_path):
+            project_root = os.path.dirname(os.path.dirname(abs_yaml))
+            resolved_base = os.path.join(project_root, base_path)
+        else:
+            resolved_base = base_path
+
+        train_imgs = os.path.join(resolved_base, cfg.get("train", "train/images"))
+        val_imgs = os.path.join(resolved_base, cfg.get("val", "val/images"))
+
+        num_train = len([f for f in os.listdir(train_imgs) if not f.startswith(".")]) if os.path.exists(train_imgs) else 0
+        num_val = len([f for f in os.listdir(val_imgs) if not f.startswith(".")]) if os.path.exists(val_imgs) else 0
+
+        logger.info(f"Đã xác thực dữ liệu: Tập Train ({num_train} ảnh) | Tập Val ({num_val} ảnh)")
+        if num_train == 0 or num_val == 0:
+            logger.warning("[CHÚ Ý] Tập dữ liệu Train hoặc Val đang rỗng!")
+            logger.warning("Vui lòng chạy tiền xử lý trước: python src/data_preprocessing.py --input-dir datasets/raw --output-dir datasets")
+
+    except Exception as e:
+        logger.debug(f"Bỏ qua bước đọc chi tiết yaml: {e}")
+
+    return abs_yaml
 
 
 def run_training(
@@ -115,8 +147,10 @@ def run_training(
     hw_info = check_hardware_environment()
 
     # 2. Kiểm tra file cấu hình
-    if not verify_dataset_yaml(data_yaml):
+    abs_data_yaml = verify_dataset_yaml(data_yaml)
+    if not abs_data_yaml:
         sys.exit(1)
+    data_yaml = abs_data_yaml
 
     # Kiểm tra cấu hình device
     if hw_info["gpu_count"] < 2 and ("0,1" in device or len(device.split(",")) > 1):

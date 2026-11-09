@@ -3,8 +3,8 @@
 # Định dạng chuẩn tương thích hoàn toàn với Ultralytics YOLOv8 / YOLOv11
 # ==============================================================================
 
-# Đường dẫn gốc tới thư mục chứa dữ liệu (có thể dùng đường dẫn tuyệt đối hoặc tương đối)
-path: ../datasets
+# Đường dẫn gốc tới thư mục chứa dữ liệu (tính từ project root)
+path: datasets
 
 # Thư mục ảnh huấn luyện và kiểm định (tính từ 'path' ở trên)
 train: train/images
