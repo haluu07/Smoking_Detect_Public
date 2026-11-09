@@ -196,14 +196,25 @@ def run_training(
     if cache_mode.lower() in ("ram", "true"):
         parsed_cache = "ram" if cache_mode.lower() == "ram" else True
 
+    # Xử lý tham số device linh hoạt cho Ultralytics
+    parsed_device = device
+    if isinstance(device, str):
+        dev_clean = device.strip().strip("'\"")
+        if dev_clean.isdigit():
+            parsed_device = int(dev_clean)
+        elif "," in dev_clean:
+            parsed_device = [int(d.strip()) for d in dev_clean.split(",") if d.strip().isdigit()]
+        else:
+            parsed_device = dev_clean
+
     # 5. Khởi động huấn luyện
-    # Toàn bộ tham số được tối ưu để khai thác tối đa 32GB VRAM của 2x RTX A4000
+    # Toàn bộ tham số được tối ưu để khai thác tối đa phần cứng
     train_args = {
         "data": data_yaml,
         "epochs": epochs,
         "batch": batch_size,
         "imgsz": imgsz,
-        "device": device,
+        "device": parsed_device,
         "workers": workers,
         "amp": True,                 # Kích hoạt FP16 Mixed Precision
         "optimizer": "AdamW",        # Bộ tối ưu AdamW ổn định cho Computer Vision hiện đại
