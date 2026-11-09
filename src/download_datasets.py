@@ -26,40 +26,40 @@ CURATED_DATASETS: Dict[str, Dict[str, Any]] = {
     # --------------------------------------------------------------------------
     # 1. ROBOFLOW UNIVERSE (Đã gán nhãn chuẩn YOLOv8/YOLOv11, chỉ cần tải về)
     # --------------------------------------------------------------------------
-    "roboflow_smoking_behavior": {
-        "source": "Roboflow Universe",
-        "name": "Smoking Behavior Detection Dataset",
-        "url": "https://universe.roboflow.com/roboflow-100/smoking-behavior-detection",
-        "workspace": "roboflow-100",
-        "project": "smoking-behavior-detection",
-        "version": 1,
-        "classes": ["smoking", "not_smoking"],
-        "approx_images": 2500,
-        "description": "Bộ dữ liệu tiêu chuẩn từ benchmark Roboflow-100, tập trung vào hành vi người hút thuốc.",
-        "recommended": True
-    },
     "roboflow_cigarette_v8": {
         "source": "Roboflow Universe",
-        "name": "Cigarette and Smoke Detection",
-        "url": "https://universe.roboflow.com/project-smoking/smoking-detection-yolo",
-        "workspace": "project-smoking",
-        "project": "smoking-detection-yolo",
+        "name": "Smoking and Cigarette CCTV Detection (640x640 v2)",
+        "url": "https://universe.roboflow.com/dms-xx2dk/smoking-detection-640_v_2",
+        "workspace": "dms-xx2dk",
+        "project": "smoking-detection-640_v_2",
         "version": 2,
-        "classes": ["cigarette", "smoke", "person_smoking"],
-        "approx_images": 3800,
-        "description": "Gán nhãn chi tiết từng điếu thuốc, tàn khói và người hút thuốc trong nhà và ngoài trời.",
+        "classes": ["smoking", "cigarette"],
+        "approx_images": 2100,
+        "description": "Bộ dữ liệu chuẩn CCTV phát hiện người hút thuốc và điếu thuốc lá góc quay công cộng.",
         "recommended": True
     },
-    "roboflow_smoking_calling": {
+    "roboflow_smoking_behavior": {
         "source": "Roboflow Universe",
-        "name": "Smoking and Calling In Public",
-        "url": "https://universe.roboflow.com/security-cctv/smoking-calling-detection",
-        "workspace": "security-cctv",
-        "project": "smoking-calling-detection",
+        "name": "Smoking Person Detection Dataset",
+        "url": "https://universe.roboflow.com/yolov8-svr4x/smoking-person-detection-ec7ec-y9xth",
+        "workspace": "yolov8-svr4x",
+        "project": "smoking-person-detection-ec7ec-y9xth",
         "version": 1,
-        "classes": ["smoking", "calling", "normal"],
-        "approx_images": 4200,
-        "description": "Đặc biệt hữu ích để phân biệt hành vi hút thuốc và nghe điện thoại (hạn chế False Positives).",
+        "classes": ["smoking", "person"],
+        "approx_images": 1000,
+        "description": "Tập trung vào hành vi người hút thuốc.",
+        "recommended": True
+    },
+    "roboflow_smoking_cctv": {
+        "source": "Roboflow Universe",
+        "name": "Smoking Detection Multi-Class",
+        "url": "https://universe.roboflow.com/smoking-detection-q1kyj/smoking-wuief",
+        "workspace": "smoking-detection-q1kyj",
+        "project": "smoking-wuief",
+        "version": 1,
+        "classes": ["smoking", "cigarette", "smoke"],
+        "approx_images": 1500,
+        "description": "Gán nhãn đầy đủ hành vi và thực thể điếu thuốc, khói.",
         "recommended": True
     },
 
@@ -113,16 +113,10 @@ def download_from_roboflow(
     model_format: str = "yolov8"
 ) -> bool:
     """
-    Tải trực tiếp bộ dữ liệu từ Roboflow Universe thông qua Roboflow Python SDK.
-    Dữ liệu tải về đã được phân sẵn train/val/test và định dạng bbox chuẩn YOLO.
+    Tải trực tiếp bộ dữ liệu từ Roboflow Universe.
+    Tự động thử qua Roboflow REST API trực tiếp trước (không cần cài thêm thư viện phụ thuộc),
+    nếu không thành công sẽ fallback qua Roboflow Python SDK.
     """
-    try:
-        from roboflow import Roboflow
-    except ImportError:
-        print("[LỖI] Thư viện 'roboflow' chưa được cài đặt.")
-        print("Vui lòng chạy: pip install roboflow")
-        return False
-
     if dataset_key not in CURATED_DATASETS:
         print(f"[LỖI] ID bộ dữ liệu '{dataset_key}' không có trong danh mục.")
         return False
@@ -132,19 +126,52 @@ def download_from_roboflow(
         print(f"[LỖI] '{dataset_key}' không phải từ Roboflow.")
         return False
 
-    print(f"\n[INFO] Đang kết nối tới Roboflow Universe để tải: {meta['name']}...")
+    ws = meta["workspace"]
+    proj = meta["project"]
+    ver = meta["version"]
+    os.makedirs(output_dir, exist_ok=True)
+
+    print(f"\n[INFO] Đang kết nối tới Roboflow Universe ({ws}/{proj}/v{ver}): {meta['name']}...")
+
+    # Cách 1: Tải trực tiếp qua REST API (Nhanh và không phụ thuộc package roboflow)
     try:
+        import json
+        api_url = f"https://api.roboflow.com/{ws}/{proj}/{ver}/{model_format}?api_key={api_key}"
+        req = urllib.request.Request(api_url, headers={"User-Agent": "SmokingDetectionClient/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+            export_link = data.get("export", {}).get("link")
+
+        if export_link:
+            zip_dest = os.path.join(output_dir, f"{proj}_v{ver}.zip")
+            print(f"[INFO] Đang tải gói dữ liệu nén: {proj}_v{ver}.zip...")
+            urllib.request.urlretrieve(export_link, zip_dest)
+            
+            print(f"[INFO] Đang giải nén dữ liệu vào: {output_dir}...")
+            with zipfile.ZipFile(zip_dest, 'r') as zip_ref:
+                zip_ref.extractall(output_dir)
+            if os.path.exists(zip_dest):
+                os.remove(zip_dest)
+            print(f"[THÀNH CÔNG] Dữ liệu đã được tải về và giải nén hoàn tất tại: {output_dir}")
+            return True
+    except Exception as rest_err:
+        print(f"[THÔNG BÁO] Tải trực tiếp REST API không thành công ({rest_err}), chuyển sang Roboflow SDK...")
+
+    # Cách 2: Fallback qua Roboflow Python SDK
+    try:
+        from roboflow import Roboflow
         rf = Roboflow(api_key=api_key)
-        project = rf.workspace(meta["workspace"]).project(meta["project"])
-        version = project.version(meta["version"])
-        
-        # Tải dataset định dạng YOLO
+        project = rf.workspace(ws).project(proj)
+        version = project.version(ver)
         dataset = version.download(model_format=model_format, location=output_dir)
         print(f"[THÀNH CÔNG] Dữ liệu đã được tải về và lưu tại: {dataset.location}")
         return True
+    except ImportError:
+        print("[LỖI] Cần cài đặt thư viện 'roboflow' để tải: pip install roboflow")
+        return False
     except Exception as e:
         print(f"[LỖI] Quá trình tải từ Roboflow thất bại: {e}")
-        print("[GỢI Ý] Hãy kiểm tra lại API Key hoặc đăng ký miễn phí tại https://roboflow.com")
+        print("[GỢI Ý] Hãy kiểm tra lại API Key hoặc kết nối mạng của server.")
         return False
 
 
@@ -266,7 +293,8 @@ def parse_arguments():
         default="datasets/raw",
         help="Thư mục đích để lưu trữ dữ liệu sau khi tải."
     )
-    return parser.parse_args()
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def main():
