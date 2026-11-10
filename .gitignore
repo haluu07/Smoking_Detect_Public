@@ -20,9 +20,13 @@ datasets/val/labels/*
 
 # Weights & Run logs
 runs/
-*.pt
 *.onnx
 *.engine
+*.pt
+!weights/*.pt
+!runs/detect/**/*.png
+!runs/detect/**/*.jpg
+!runs/detect/**/*.csv
 
 # Violations logs & snapshots
 violations/snapshots/*

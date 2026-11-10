@@ -108,6 +108,7 @@ class ServerDetectorManager:
         """Tự động quét các vị trí lưu mô hình tốt nhất trong hệ thống."""
         candidates = [
             user_weights,
+            os.path.join(PROJECT_ROOT, "weights/best.pt"),
             os.path.join(PROJECT_ROOT, "runs/detect/smoking_baseline_2x_a4000/weights/best.pt"),
             os.path.join(PROJECT_ROOT, "runs/detect/smoking_baseline/weights/best.pt"),
             "/home/qtech/CheatingDetection/runs/detect/runs/detect/smoking_baseline_2x_a4000/weights/best.pt",
