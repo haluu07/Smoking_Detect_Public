@@ -100,6 +100,17 @@ class ServerDetectorManager:
         self.total_violations_today = 0
         self.last_frame_bytes: Optional[bytes] = None
 
+        # Bộ phát hiện khuôn mặt nhẹ để xác thực vùng miệng (Mouth zone verification)
+        self.face_cascade = None
+        try:
+            if hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
+                cascade_file = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
+                if os.path.exists(cascade_file):
+                    self.face_cascade = cv2.CascadeClassifier(cascade_file)
+                    logger.info("[SPATIAL ENGINE] Đã kích hoạt OpenCV Face Cascade để xác thực vùng miệng.")
+        except Exception as e:
+            logger.warning(f"Không thể khởi tạo face cascade: {e}")
+
         # Video Capture instance
         self.cap: Optional[cv2.VideoCapture] = None
         self._init_video_capture()
@@ -253,26 +264,76 @@ class ServerDetectorManager:
                 elif "person" in cls_name:
                     detected_persons.append(coords)
 
+        # 0. Phát hiện khuôn mặt nếu bộ lọc không gian được kích hoạt (nhẹ ~2ms)
+        detected_faces: List[List[int]] = []
+        if spatial_enabled and self.face_cascade is not None:
+            try:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                small_gray = cv2.resize(gray, (0, 0), fx=0.5, fy=0.5)
+                faces = self.face_cascade.detectMultiScale(small_gray, scaleFactor=1.2, minNeighbors=4, minSize=(30, 30))
+                for (fx, fy, fw, fh) in faces:
+                    detected_faces.append([fx * 2, fy * 2, (fx + fw) * 2, (fy + fh) * 2])
+            except Exception:
+                pass
+
         # Xác thực hành vi hút thuốc
         violation_detected_raw = False
         active_boxes: List[Tuple[List[int], str, float, bool]] = []
 
-        # 1. Nếu mô hình trực tiếp nhận ra lớp "smoking"
+        # 1. Xác thực lớp "smoking"
         for s_box, s_conf in detected_smokers:
-            violation_detected_raw = True
-            active_boxes.append((s_box, "Smoking", s_conf, True))
+            is_valid = True
+            # Kiểm tra hình học: Hành vi hút thuốc chỉ diễn ra ở nửa dưới khuôn mặt (vùng miệng/cằm).
+            # Nếu vật thể nằm ở trán, mắt hoặc đỉnh đầu thì loại bỏ báo động giả (bút, tay, gãi đầu).
+            if spatial_enabled and len(detected_faces) > 0:
+                s_cx = (s_box[0] + s_box[2]) / 2.0
+                s_cy = (s_box[1] + s_box[3]) / 2.0
+                is_valid = False
+                for (fx, fy, fx2, fy2) in detected_faces:
+                    fh = fy2 - fy
+                    # Nếu vật thể nằm ở nửa trên mặt (trán/mắt), bỏ qua vì không thể hút thuốc qua trán
+                    if s_cy < (fy + 0.45 * fh):
+                        continue
+                    # Khoảng cách tới vùng miệng (ước lượng ở 82% chiều cao mặt)
+                    mouth_x = (fx + fx2) / 2.0
+                    mouth_y = fy + 0.82 * fh
+                    dist = ((s_cx - mouth_x)**2 + (s_cy - mouth_y)**2)**0.5
+                    if dist <= (fh * 0.95):
+                        is_valid = True
+                        break
 
-        # 2. Phân tích tương quan không gian giữa điếu thuốc và thân trên/mặt người
+            if is_valid:
+                violation_detected_raw = True
+                active_boxes.append((s_box, "Smoking", s_conf, True))
+            else:
+                active_boxes.append((s_box, "Object (Not Mouth)", s_conf, False))
+
+        # 2. Phân tích tương quan không gian giữa điếu thuốc và vùng miệng / thân người
         for cig_box, cig_conf in detected_cigs:
             is_valid = True
-            if spatial_enabled and len(detected_persons) > 0:
-                is_valid = any(is_spatial_smoking_valid(cig_box, p_box) for p_box in detected_persons)
+            if spatial_enabled:
+                if len(detected_faces) > 0:
+                    c_cx = (cig_box[0] + cig_box[2]) / 2.0
+                    c_cy = (cig_box[1] + cig_box[3]) / 2.0
+                    is_valid = False
+                    for (fx, fy, fx2, fy2) in detected_faces:
+                        fh = fy2 - fy
+                        if c_cy < (fy + 0.45 * fh):
+                            continue
+                        mouth_x = (fx + fx2) / 2.0
+                        mouth_y = fy + 0.82 * fh
+                        dist = ((c_cx - mouth_x)**2 + (c_cy - mouth_y)**2)**0.5
+                        if dist <= (fh * 0.95):
+                            is_valid = True
+                            break
+                elif len(detected_persons) > 0:
+                    is_valid = any(is_spatial_smoking_valid(cig_box, p_box) for p_box in detected_persons)
 
             if is_valid:
                 violation_detected_raw = True
                 active_boxes.append((cig_box, "Cigarette", cig_conf, True))
             else:
-                active_boxes.append((cig_box, "Object", cig_conf, False))
+                active_boxes.append((cig_box, "Object (Not Mouth)", cig_conf, False))
 
         # 3. Đối tượng khói thuốc
         for smk_box, smk_conf in detected_smoke:
