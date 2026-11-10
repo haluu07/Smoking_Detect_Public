@@ -6,7 +6,7 @@
 
 set -e
 
-PORT=8000
+PORT=7860
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
