@@ -251,12 +251,13 @@ def run_training(
     results = model.train(**train_args)
 
     logger.info("[HOÀN TẤT] Huấn luyện thành công!")
-    best_weight_path = os.path.join(project_dir, run_name, "weights", "best.pt")
+    save_dir = str(getattr(results, "save_dir", os.path.join(project_dir, run_name)))
+    best_weight_path = os.path.join(save_dir, "weights", "best.pt")
     logger.info(f"Trọng số tối ưu nhất được lưu tại: {best_weight_path}")
 
-    # Đánh giá trên tập val
+    # Đánh giá trên tập val và lưu đúng thư mục project hiện tại
     logger.info("Đang tính toán ma trận đánh giá (Validation Metrics)...")
-    val_results = model.val()
+    val_results = model.val(project=save_dir, name="val_metrics", exist_ok=True)
     print("\n" + "=" * 75)
     print(" KẾT QUẢ ĐÁNH GIÁ MÔ HÌNH BASELINE (VAL SET):")
     print(f"  - mAP50        : {val_results.box.map50:.4f}")
