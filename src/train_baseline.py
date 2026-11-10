@@ -182,10 +182,16 @@ def run_training(
 
     # 3. Import Ultralytics
     try:
-        from ultralytics import YOLO
+        from ultralytics import YOLO, settings
+        # Ép Ultralytics luôn lưu runs vào thư mục hiện tại của dự án
+        abs_runs_dir = os.path.abspath("runs")
+        settings.update({"runs_dir": abs_runs_dir})
     except ImportError:
         logger.error("Thư viện 'ultralytics' chưa được cài đặt. Vui lòng chạy: pip install ultralytics")
         sys.exit(1)
+
+    # Đảm bảo project_dir luôn là đường dẫn tuyệt đối trong thư mục hiện tại
+    abs_project_dir = os.path.abspath(project_dir)
 
     # 4. Khởi tạo mô hình
     logger.info(f"Đang tải trọng số tiền huấn luyện (pretrained weights): {model_name}...")
@@ -225,7 +231,7 @@ def run_training(
         "save": True,                # Lưu checkpoints
         "save_period": 10,           # Lưu checkpoint mỗi 10 epoch
         "cache": parsed_cache,       # Cache dữ liệu vào RAM nếu hệ thống đủ RAM
-        "project": project_dir,
+        "project": abs_project_dir,  # Bắt buộc lưu vào thư mục hiện tại
         "name": run_name,
         "exist_ok": True,
         "pretrained": True,
@@ -333,6 +339,18 @@ def parse_arguments():
         help="Lưu cache ảnh vào RAM hoặc disk để tăng tốc đọc dữ liệu."
     )
     parser.add_argument(
+        "--project",
+        type=str,
+        default="runs/detect",
+        help="Thư mục lưu kết quả thí nghiệm (mặc định: runs/detect trong thư mục hiện tại)."
+    )
+    parser.add_argument(
+        "--name",
+        type=str,
+        default="smoking_baseline_2x_a4000",
+        help="Tên đợt thử nghiệm (subfolder)."
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Chỉ kiểm tra cấu hình và phần cứng, KHÔNG chạy huấn luyện thực tế."
@@ -351,7 +369,10 @@ if __name__ == "__main__":
         imgsz=args.imgsz,
         device=args.device,
         workers=args.workers,
+        project_dir=args.project,
+        run_name=args.name,
         patience=args.patience,
         cache_mode=args.cache,
         dry_run=args.dry_run
     )
+
