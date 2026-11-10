@@ -494,8 +494,12 @@ def mjpeg_frame_generator():
             frame_counter = 0
             fps_time = now
 
-        # Xử lý nhận diện và vẽ HUD
-        annotated_frame, _ = detector_manager.process_cv_frame(frame)
+        try:
+            # Xử lý nhận diện và vẽ HUD
+            annotated_frame, _ = detector_manager.process_cv_frame(frame)
+        except Exception as e:
+            logger.error(f"Lỗi frame processing: {e}")
+            annotated_frame = frame
 
         # Nén JPEG tối ưu chất lượng 70 (tăng tốc độ nén và giảm độ trễ truyền qua mạng)
         ret, jpeg = cv2.imencode(".jpg", annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
@@ -520,6 +524,14 @@ def get_video_stream():
         mjpeg_frame_generator(),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
+
+
+@app.post("/api/stream/reset")
+def reset_video_stream():
+    """Giải phóng và kết nối lại camera khi bị gián đoạn."""
+    detector_manager._init_video_capture()
+    return {"status": "reconnected", "source": detector_manager.config.active_source}
+
 
 
 @app.post("/api/stream/source")

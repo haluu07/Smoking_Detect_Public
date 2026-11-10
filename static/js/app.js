@@ -73,8 +73,21 @@ class SmokingDetectionApp {
         btn.classList.add('active');
         const targetContent = document.getElementById(targetTab);
         if (targetContent) targetContent.classList.add('active');
+
+        // Khi quay trở lại Tab Live Monitor, tự động kết nối lại luồng video
+        if (targetTab === 'tabLive') {
+          this.reconnectStream();
+        }
       });
     });
+
+    // Tự động kết nối lại nếu trình duyệt ngắt kết nối stream
+    if (this.videoStream) {
+      this.videoStream.onerror = () => {
+        console.warn("Video stream gián đoạn, đang tự động kết nối lại...");
+        setTimeout(() => this.reconnectStream(), 1000);
+      };
+    }
 
     // Modal close
     if (this.modalClose) {
@@ -146,6 +159,19 @@ class SmokingDetectionApp {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+      });
+    }
+
+    // Reconnect / Reboot Camera button
+    const reconnectBtn = document.getElementById('reconnectBtn');
+    if (reconnectBtn) {
+      reconnectBtn.addEventListener('click', async () => {
+        reconnectBtn.classList.add('btn-primary');
+        try {
+          await fetch('/api/stream/reset', { method: 'POST' });
+        } catch (e) {}
+        this.reconnectStream();
+        setTimeout(() => reconnectBtn.classList.remove('btn-primary'), 600);
       });
     }
 
