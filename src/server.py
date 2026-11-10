@@ -33,7 +33,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import Response, StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -132,6 +132,9 @@ class ServerDetectorManager:
         self.cap: Optional[cv2.VideoCapture] = None
         self._init_video_capture()
 
+        # Bật luồng chụp ảnh và suy luận nền độc lập (hỗ trợ cả Cloudflare Tunnel và MJPEG)
+        self._start_background_camera_loop()
+
     def _resolve_weights_path(self, user_weights: Optional[str]) -> str:
         """Tự động quét các vị trí lưu mô hình tốt nhất trong hệ thống."""
         candidates = [
@@ -186,6 +189,48 @@ class ServerDetectorManager:
                 if path_or_url and path_or_url.isdigit():
                     self.config.camera_index = int(path_or_url)
             self._init_video_capture()
+
+    def _start_background_camera_loop(self):
+        """Luồng chạy nền độc lập liên tục xử lý frame cho Cloudflare Tunnel và MJPEG."""
+        def camera_worker():
+            fps_time = time.time()
+            frame_counter = 0
+            while self.is_running:
+                frame = None
+                source_mode = self.config.active_source
+
+                if source_mode != "synthetic" and self.cap is not None and self.cap.isOpened():
+                    ret, captured = self.cap.read()
+                    if ret and captured is not None:
+                        frame = captured
+                    else:
+                        if source_mode == "file":
+                            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        else:
+                            frame = self.generate_synthetic_frame(frame_counter)
+                else:
+                    frame = self.generate_synthetic_frame(frame_counter)
+
+                frame_counter += 1
+                now = time.time()
+                time_diff = now - fps_time
+                if time_diff >= 1.0:
+                    self.current_fps = frame_counter / time_diff
+                    frame_counter = 0
+                    fps_time = now
+
+                try:
+                    annotated_frame, _ = self.process_cv_frame(frame)
+                    ret, jpeg = cv2.imencode(".jpg", annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+                    if ret:
+                        self.last_frame_bytes = jpeg.tobytes()
+                except Exception as e:
+                    logger.error(f"Lỗi background camera worker: {e}")
+
+                time.sleep(0.015)
+
+        t = threading.Thread(target=camera_worker, daemon=True)
+        t.start()
 
     def generate_synthetic_frame(self, frame_count: int) -> np.ndarray:
         """
@@ -463,58 +508,14 @@ app.mount("/runs", StaticFiles(directory=RUNS_DIR), name="runs")
 
 def mjpeg_frame_generator():
     """Tạo dòng byte stream liên tục định dạng MJPEG cho thẻ <img> trên web."""
-    fps_time = time.time()
-    frame_counter = 0
-
+    last_sent = None
     while detector_manager.is_running:
-        frame = None
-        source_mode = detector_manager.config.active_source
-
-        if source_mode != "synthetic" and detector_manager.cap is not None and detector_manager.cap.isOpened():
-            ret, captured = detector_manager.cap.read()
-            if ret and captured is not None:
-                frame = captured
-            else:
-                # Nếu hết video file thì lặp lại từ đầu
-                if source_mode == "file":
-                    detector_manager.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                else:
-                    # Mất tín hiệu camera -> dùng synthetic
-                    frame = detector_manager.generate_synthetic_frame(frame_counter)
-        else:
-            frame = detector_manager.generate_synthetic_frame(frame_counter)
-
-        frame_counter += 1
-
-        # Đo FPS thực tế
-        now = time.time()
-        time_diff = now - fps_time
-        if time_diff >= 1.0:
-            detector_manager.current_fps = frame_counter / time_diff
-            frame_counter = 0
-            fps_time = now
-
-        try:
-            # Xử lý nhận diện và vẽ HUD
-            annotated_frame, _ = detector_manager.process_cv_frame(frame)
-        except Exception as e:
-            logger.error(f"Lỗi frame processing: {e}")
-            annotated_frame = frame
-
-        # Nén JPEG tối ưu chất lượng 70 (tăng tốc độ nén và giảm độ trễ truyền qua mạng)
-        ret, jpeg = cv2.imencode(".jpg", annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-        if not ret:
-            continue
-
-        frame_bytes = jpeg.tobytes()
-        detector_manager.last_frame_bytes = frame_bytes
-
-        # Chuẩn Multipart MJPEG cho trình duyệt
-        yield (b"--frame\r\n"
-               b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
-
-        # Giải phóng GIL mượt mà không bóp nghẽn FPS (loại bỏ độ trễ 33ms cũ)
-        time.sleep(0.001)
+        frame_bytes = detector_manager.last_frame_bytes
+        if frame_bytes is not None and frame_bytes != last_sent:
+            last_sent = frame_bytes
+            yield (b"--frame\r\n"
+                   b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
+        time.sleep(0.02)
 
 
 @app.get("/api/stream/video")
@@ -522,7 +523,36 @@ def get_video_stream():
     """Endpoint stream luồng video trực tiếp dạng MJPEG."""
     return StreamingResponse(
         mjpeg_frame_generator(),
-        media_type="multipart/x-mixed-replace; boundary=frame"
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive"
+        }
+    )
+
+
+@app.get("/api/stream/frame")
+def get_single_frame():
+    """Endpoint trả về 1 khung hình JPEG mới nhất, tương thích 100% với Cloudflare Tunnel."""
+    if detector_manager.last_frame_bytes is None:
+        frame = detector_manager.generate_synthetic_frame(0)
+        ret, jpeg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+        content = jpeg.tobytes() if ret else b""
+    else:
+        content = detector_manager.last_frame_bytes
+
+    return Response(
+        content=content,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Access-Control-Allow-Origin": "*"
+        }
     )
 
 
@@ -531,6 +561,7 @@ def reset_video_stream():
     """Giải phóng và kết nối lại camera khi bị gián đoạn."""
     detector_manager._init_video_capture()
     return {"status": "reconnected", "source": detector_manager.config.active_source}
+
 
 
 

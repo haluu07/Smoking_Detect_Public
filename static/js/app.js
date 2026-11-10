@@ -16,6 +16,7 @@ class SmokingDetectionApp {
     this.initElements();
     this.initTabs();
     this.initControls();
+    this.initStream();
     this.initPolling();
     this.loadResearchData();
     this.initDropzone();
@@ -194,9 +195,61 @@ class SmokingDetectionApp {
     }
   }
 
+  initStream() {
+    // Tự động phát hiện xem người dùng đang truy cập qua Cloudflare Tunnel hay không
+    const isCloudflare = window.location.hostname.includes('trycloudflare.com') || window.location.protocol === 'https:';
+
+    if (isCloudflare) {
+      console.log("[STREAM MODE] Phát hiện Cloudflare Tunnel -> Kích hoạt chế độ High-Speed Frame Stream");
+      this.startFramePollingStream();
+    } else {
+      if (this.videoStream) {
+        this.videoStream.src = `/api/stream/video?t=${Date.now()}`;
+        this.videoStream.onerror = () => {
+          console.warn("[STREAM FAILOVER] MJPEG không phản hồi, tự động chuyển sang High-Speed Frame Stream");
+          this.startFramePollingStream();
+        };
+      }
+    }
+  }
+
+  startFramePollingStream() {
+    if (this._frameStreamActive) return;
+    this._frameStreamActive = true;
+
+    const streamImg = this.videoStream;
+    let isFetching = false;
+
+    const nextFrame = () => {
+      if (!this._frameStreamActive) return;
+      if (isFetching) return;
+      isFetching = true;
+
+      const img = new Image();
+      img.onload = () => {
+        if (streamImg) streamImg.src = img.src;
+        isFetching = false;
+        requestAnimationFrame(nextFrame);
+      };
+      img.onerror = () => {
+        isFetching = false;
+        setTimeout(nextFrame, 250);
+      };
+      img.src = `/api/stream/frame?t=${Date.now()}`;
+    };
+
+    nextFrame();
+  }
+
   reconnectStream() {
-    if (this.videoStream) {
-      this.videoStream.src = `/api/stream/video?t=${Date.now()}`;
+    const isCloudflare = window.location.hostname.includes('trycloudflare.com') || window.location.protocol === 'https:';
+    if (isCloudflare || this._frameStreamActive) {
+      this._frameStreamActive = false;
+      setTimeout(() => this.startFramePollingStream(), 100);
+    } else {
+      if (this.videoStream) {
+        this.videoStream.src = `/api/stream/video?t=${Date.now()}`;
+      }
     }
   }
 
